@@ -13,23 +13,41 @@ export function HantarTugasan({ setCurrentPage }: any) {
   const [selectedTugasanId, setSelectedTugasanId] = useState<number | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [notes, setNotes] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
   useEffect(() => {
     const fetchTugasan = async () => {
       try {
+        setErrorMessage("");
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
-        const response = await fetch("/api/tugasan", {
+        const response = await fetch("/api/jadual?kategori=LATIHAN", {
           headers: { Authorization: authHeader },
         });
         if (response.ok) {
           const data = await response.json();
-          setTugasanList(data.filter((t: Tugasan) => t.status === "Aktif"));
+          const mapped: Tugasan[] = (Array.isArray(data) ? data : []).map((j: any) => ({
+            tugasanID: Number(j.jadualID),
+            tajuk: String(j.jenis || "Latihan"),
+            keterangan: String(j.keterangan || j.lokasi || ""),
+            tarikh_tamat: String(j.tarikh || ""),
+            status: "Aktif",
+          }));
+          setTugasanList(mapped);
         } else {
-          console.error("Gagal memuatkan data tugasan");
+          const text = await response.text();
+          let msg = "Gagal memuatkan tugasan latihan.";
+          try {
+            const parsed = text ? JSON.parse(text) : null;
+            if (parsed?.message) msg = String(parsed.message);
+          } catch {}
+          setErrorMessage(msg);
+          setTugasanList([]);
         }
       } catch (error) {
         console.error("Ralat memuatkan data tugasan:", error);
+        setErrorMessage("Ralat rangkaian. Sila cuba lagi.");
+        setTugasanList([]);
       }
     };
     fetchTugasan();
@@ -62,7 +80,7 @@ export function HantarTugasan({ setCurrentPage }: any) {
       const buktiBase64 = await toBase64(selectedFile);
       const token = localStorage.getItem("token");
       const authHeader = token ? "Bearer " + token : "";
-      const url = "/api/tugasan/" + selectedTugasanId + "/hantar";
+      const url = "/api/bukti-latihan/hantar";
       
       const response = await fetch(url, {
         method: "POST",
@@ -71,7 +89,7 @@ export function HantarTugasan({ setCurrentPage }: any) {
           Authorization: authHeader,
         },
         body: JSON.stringify({
-          tugasanID: selectedTugasanId,
+          jadual_id: selectedTugasanId,
           catatan: notes,
           buktiBase64,
           fileName: selectedFile.name
@@ -108,13 +126,24 @@ export function HantarTugasan({ setCurrentPage }: any) {
       </div>
       <div className="border-t-2 border-gray-800"></div>
 
+      {errorMessage && (
+        <div className="p-6 border-b-2 border-gray-800">
+          <div className="bg-red-50 border-2 border-red-200 rounded p-4 text-red-700">
+            {errorMessage}
+          </div>
+        </div>
+      )}
+
       <div className="p-6 border-b-2 border-gray-800">
         <div className="space-y-2">
           <div>
             <label className="block mb-2 font-medium">Pilih Tugasan:</label>
             <select
               value={selectedTugasanId ?? ""}
-              onChange={(e) => setSelectedTugasanId(Number(e.target.value))}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSelectedTugasanId(v ? Number(v) : null);
+              }}
               className="w-full p-3 border-2 border-gray-800 rounded"
             >
               <option value="">-- Sila Pilih Tugasan --</option>

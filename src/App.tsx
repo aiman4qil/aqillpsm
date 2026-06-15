@@ -671,6 +671,15 @@ export default function App() {
             onBack={() => setCurrentPage("maklumat-pemain")}
           />
         );
+
+      case "tambah-jurulatih":
+        return (
+          <DaftarPage
+            isAdminAdd={true}
+            createRole="Jurulatih"
+            onBack={() => setCurrentPage("maklumat-pemain")}
+          />
+        );
       
       case "coach-dashboard":
         return <CoachDashboard {...pageProps} />;

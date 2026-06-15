@@ -4,34 +4,75 @@ interface DaftarPageProps {
   onShowLogin?: () => void;
   onBack?: () => void;
   isAdminAdd?: boolean;
+  createRole?: "Pemain" | "Jurulatih";
 }
 
-export function DaftarPage({ onShowLogin, onBack, isAdminAdd = false }: DaftarPageProps) {
+export function DaftarPage({ onShowLogin, onBack, isAdminAdd = false, createRole }: DaftarPageProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [posisi, setPosisi] = useState("2");
-  const [peranan, setPeranan] = useState<"Pentadbir" | "Jurulatih" | "Pemain">("Pemain");
+  const [peranan] = useState<"Pemain" | "Jurulatih">((isAdminAdd ? (createRole || "Pemain") : "Pemain"));
 
   const isValid =
     username.trim().length > 0 &&
     password.trim().length > 0 &&
     confirmPassword === password;
 
+  const getApiCandidates = (path: string) => {
+    const envBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+    const resolvedEnvBase = envBase ? String(envBase).replace(/\/+$/, "") : "";
+    const hostname = window.location.hostname;
+    const backendHostBase = `${window.location.protocol}//${hostname}:3002`;
+    const candidates: string[] = [];
+    if (resolvedEnvBase) candidates.push(resolvedEnvBase + path);
+    candidates.push(path);
+    candidates.push(backendHostBase + path);
+    return candidates;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid) return;
 
     try {
-      const response = await fetch("/api/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ username, password, role: peranan, posisi }),
-      });
+      const token = localStorage.getItem("token") || "";
+      const candidates = getApiCandidates("/api/register");
+      let response: Response | null = null;
+      let data: any = null;
+      let lastError: unknown = null;
 
-      const data = await response.json();
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: "Bearer " + token } : {}),
+            },
+            body: JSON.stringify({ username, password, role: peranan, posisi }),
+          });
+          const text = await res.text();
+          let parsed: any = null;
+          try {
+            parsed = text ? JSON.parse(text) : null;
+          } catch {
+            parsed = null;
+          }
+          if (parsed === null && res.ok) continue;
+          if (res.status === 404 || res.status === 502 || res.status === 503 || res.status === 504) {
+            lastError = new Error(`HTTP ${res.status}`);
+            continue;
+          }
+          response = res;
+          data = parsed;
+          break;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      if (!response) throw lastError || new Error("Request failed");
 
       if (response.ok) {
         alert(data.message);
@@ -48,6 +89,8 @@ export function DaftarPage({ onShowLogin, onBack, isAdminAdd = false }: DaftarPa
       alert("Pendaftaran gagal. Sila semak konsol untuk maklumat lanjut.");
     }
   };
+
+  const headerTitle = isAdminAdd ? (peranan === "Jurulatih" ? "Tambah Jurulatih" : "Tambah Pemain") : "Sign up";
 
   return (
     <div className={(isAdminAdd ? "flex justify-center p-4" : "min-h-screen login-page-bg flex items-center justify-center p-4")}>
@@ -129,43 +172,8 @@ export function DaftarPage({ onShowLogin, onBack, isAdminAdd = false }: DaftarPa
           )}
 
           {!isAdminAdd && (
-            <div>
-              <div className="mb-3">Peranan:</div>
-              <div className="flex gap-6">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="peranan"
-                    value="Pentadbir"
-                    checked={peranan === "Pentadbir"}
-                    onChange={(e) => setPeranan(e.target.value as typeof peranan)}
-                    className="w-5 h-5"
-                  />
-                  <span>Pentadbir</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="peranan"
-                    value="Jurulatih"
-                    checked={peranan === "Jurulatih"}
-                    onChange={(e) => setPeranan(e.target.value as typeof peranan)}
-                    className="w-5 h-5"
-                  />
-                  <span>Jurulatih</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="peranan"
-                    value="Pemain"
-                    checked={peranan === "Pemain"}
-                    onChange={(e) => setPeranan(e.target.value as typeof peranan)}
-                    className="w-5 h-5"
-                  />
-                  <span>Pemain</span>
-                </label>
-              </div>
+            <div className="text-sm text-gray-700">
+              Pendaftaran melalui halaman ini hanya untuk Pemain. Akaun Pentadbir/Jurulatih didaftarkan oleh Pentadbir.
             </div>
           )}
 
@@ -178,7 +186,7 @@ export function DaftarPage({ onShowLogin, onBack, isAdminAdd = false }: DaftarPa
                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}
           >
-            {isAdminAdd ? "Tambah Pemain" : "Sign up"}
+            {headerTitle}
           </button>
         </form>
         <div className="text-center mt-6 pt-6 border-t-2 border-gray-800">

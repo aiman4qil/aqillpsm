@@ -20,19 +20,55 @@ export function PenilaianPemain({ setCurrentPage, role }: any) {
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
+  const getApiCandidates = (path: string) => {
+    const envBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+    const resolvedEnvBase = envBase ? String(envBase).replace(/\/+$/, "") : "";
+    const hostname = window.location.hostname;
+    const backendHostBase = `${window.location.protocol}//${hostname}:3002`;
+    const candidates: string[] = [];
+    if (resolvedEnvBase) candidates.push(resolvedEnvBase + path);
+    candidates.push(path);
+    candidates.push(backendHostBase + path);
+    return candidates;
+  };
+
+  const fetchJsonApi = async (path: string, init?: RequestInit) => {
+    const candidates = getApiCandidates(path);
+    let lastError: unknown = null;
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, init);
+        const text = await res.text();
+        let data: any = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
+        if (data === null && res.ok) continue;
+        if (res.status === 404 || res.status === 502 || res.status === 503 || res.status === 504) {
+          lastError = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        return { res, data, text };
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("Request failed");
+  };
+
   useEffect(() => {
     const fetchPlayers = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch("/api/pemain", {
-          headers: { Authorization: `Bearer ${token}` }
+        const resp = await fetchJsonApi("/api/pemain", {
+          headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.ok) {
-          const data = await res.json();
+        if (resp.res.ok && Array.isArray(resp.data)) {
+          const data = resp.data;
           setPlayers(data);
-          if (data.length > 0) {
-            setSelectedPlayer(String(data[0].pemainID));
-          }
+          if (data.length > 0) setSelectedPlayer(String(data[0].pemainID));
         }
       } catch (e) {
         console.error(e);
@@ -50,7 +86,7 @@ export function PenilaianPemain({ setCurrentPage, role }: any) {
     try {
       setIsSaving(true);
       const token = localStorage.getItem("token");
-      const res = await fetch("/api/penilaian", {
+      const resp = await fetchJsonApi("/api/penilaian", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -63,15 +99,8 @@ export function PenilaianPemain({ setCurrentPage, role }: any) {
           komen: comment
         })
       });
-
-      const text = await res.text();
-      let data: any = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch {
-        data = null;
-      }
-      if (res.ok) {
+      const data = resp.data;
+      if (resp.res.ok) {
         setMessage("Penilaian berjaya disimpan!");
         alert("Penilaian berjaya disimpan!");
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -79,7 +108,7 @@ export function PenilaianPemain({ setCurrentPage, role }: any) {
         setRatings({ teknikal: 5, fizikal: 5, taktikal: 5, mental: 5 });
         setTimeout(() => setMessage(""), 8000);
       } else {
-        setMessage(data?.message ? String(data.message) : ("Gagal menyimpan penilaian. (" + res.status + ")"));
+        setMessage(data?.message ? String(data.message) : ("Gagal menyimpan penilaian. (" + resp.res.status + ")"));
       }
     } catch (e) {
       console.error(e);

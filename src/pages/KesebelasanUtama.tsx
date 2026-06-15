@@ -9,6 +9,7 @@ interface Player {
 
 interface Jadual {
   jadualID: number;
+  kategori?: string;
   jenis: string;
   tarikh: string;
   masa: string;
@@ -34,28 +35,65 @@ export function KesebelasanUtama({ setCurrentPage, readOnly }: { setCurrentPage:
     pivot: { nama: "Pilih", no: "-" }
   });
 
+  const getApiCandidates = (path: string) => {
+    const envBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+    const resolvedEnvBase = envBase ? String(envBase).replace(/\/+$/, "") : "";
+    const hostname = window.location.hostname;
+    const backendHostBase = `${window.location.protocol}//${hostname}:3002`;
+    const candidates: string[] = [];
+    if (resolvedEnvBase) candidates.push(resolvedEnvBase + path);
+    candidates.push(path);
+    candidates.push(backendHostBase + path);
+    return candidates;
+  };
+
+  const fetchJsonApi = async (path: string, init?: RequestInit) => {
+    const candidates = getApiCandidates(path);
+    let lastError: unknown = null;
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, init);
+        const text = await res.text();
+        let data: any = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
+        if (data === null && res.ok) continue;
+        if (res.status === 404 || res.status === 502 || res.status === 503 || res.status === 504) {
+          lastError = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        return { res, data, text };
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("Request failed");
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
-        if (!readOnly) {
-          const playersRes = await fetch("/api/pemain", {
-            headers: { Authorization: authHeader },
-          });
-          if (playersRes.ok) {
-            const playersData = await playersRes.json();
-            setPlayers(playersData);
-            
+        const playersResp = await fetchJsonApi("/api/pemain", {
+          headers: { Authorization: authHeader },
+        });
+        if (playersResp.res.ok && Array.isArray(playersResp.data)) {
+          const playersData: Player[] = playersResp.data;
+          setPlayers(playersData);
+
+          if (!readOnly) {
             const playersWithRatings: PlayerWithRating[] = [];
-            
             for (const player of playersData) {
               try {
-                const prestasiRes = await fetch(`/api/prestasi/pemain/${player.pemainID}`, {
+                const prestasiResp = await fetchJsonApi(`/api/prestasi/pemain/${player.pemainID}`, {
                   headers: { Authorization: authHeader },
                 });
-                if (prestasiRes.ok) {
-                  const prestasiData = await prestasiRes.json();
+                if (prestasiResp.res.ok && Array.isArray(prestasiResp.data)) {
+                  const prestasiData = prestasiResp.data;
                   let totalRating = 0;
                   let count = 0;
                   prestasiData.forEach((p: any) => {
@@ -66,7 +104,7 @@ export function KesebelasanUtama({ setCurrentPage, readOnly }: { setCurrentPage:
                   });
                   playersWithRatings.push({
                     ...player,
-                    rating: count > 0 ? totalRating / count : 0
+                    rating: count > 0 ? totalRating / count : 0,
                   });
                 } else {
                   playersWithRatings.push({ ...player, rating: 0 });
@@ -75,18 +113,22 @@ export function KesebelasanUtama({ setCurrentPage, readOnly }: { setCurrentPage:
                 playersWithRatings.push({ ...player, rating: 0 });
               }
             }
-            
             setPlayersWithRating(playersWithRatings);
           }
         }
 
-        const matchesRes = await fetch("/api/jadual", {
-            headers: { Authorization: authHeader },
+        const matchesResp = await fetchJsonApi("/api/jadual", {
+          headers: { Authorization: authHeader },
         });
-        if (matchesRes.ok) {
-            const data: Jadual[] = await matchesRes.json();
-            setMatches(data);
-            if (data.length > 0) setSelectedMatchId(data[0].jadualID);
+        if (matchesResp.res.ok && Array.isArray(matchesResp.data)) {
+          const data: Jadual[] = matchesResp.data;
+          const perlawananOnly = data.filter((m) => {
+            const kat = String((m as any)?.kategori || "").toUpperCase();
+            if (kat) return kat === "PERLAWANAN";
+            return String(m?.jenis || "").toLowerCase().includes("perlaw");
+          });
+          setMatches(perlawananOnly);
+          if (!readOnly && perlawananOnly.length > 0) setSelectedMatchId(perlawananOnly[0].jadualID);
         }
 
       } catch (error) {
@@ -102,11 +144,10 @@ export function KesebelasanUtama({ setCurrentPage, readOnly }: { setCurrentPage:
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
         const qp = selectedMatchId ? "?jadual_id=" + selectedMatchId : "";
-        const lineupRes = await fetch("/api/lineup" + qp, {
-          headers: { Authorization: authHeader },
-        });
-        if (!lineupRes.ok) return;
-        const savedData = await lineupRes.json();
+        const url = readOnly && !selectedMatchId ? "/api/lineup" : ("/api/lineup" + qp);
+        const lineupResp = await fetchJsonApi(url, { headers: { Authorization: authHeader } });
+        if (!lineupResp.res.ok) return;
+        const savedData = lineupResp.data;
         setFormasi("1-2-1");
         if (!savedData || !savedData.pemain_positions) return;
         let positions;
@@ -121,7 +162,7 @@ export function KesebelasanUtama({ setCurrentPage, readOnly }: { setCurrentPage:
       } catch {}
     };
     fetchLineup();
-  }, [selectedMatchId]);
+  }, [selectedMatchId, readOnly]);
 
   const selectedMatch = matches.find(m => m.jadualID === selectedMatchId);
 
@@ -173,16 +214,16 @@ export function KesebelasanUtama({ setCurrentPage, readOnly }: { setCurrentPage:
       try {
           const token = localStorage.getItem("token");
           const authHeader = token ? "Bearer " + token : "";
-          const response = await fetch("/api/lineup", {
-              method: "POST",
-              headers: { 
-                  "Content-Type": "application/json",
-                  Authorization: authHeader 
-              },
-              body: JSON.stringify({ formasi, pemain_positions: lineup, jadual_id: selectedMatchId })
+          const response = await fetchJsonApi("/api/lineup", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: authHeader,
+            },
+            body: JSON.stringify({ formasi, pemain_positions: lineup, jadual_id: selectedMatchId }),
           });
-          
-          if (response.ok) {
+
+          if (response.res.ok) {
             alert("Kesebelasan utama berjaya disimpan!");
           } else {
             alert("Gagal menyimpan lineup.");
@@ -206,18 +247,22 @@ export function KesebelasanUtama({ setCurrentPage, readOnly }: { setCurrentPage:
                  <label className="block font-bold mb-2">Pilih Acara:</label>
                  <select 
                      className="w-full p-2 border-2 border-gray-800 rounded"
-                     value={selectedMatchId || ""}
-                     onChange={(e) => setSelectedMatchId(Number(e.target.value))}
+                     value={selectedMatchId ?? ""}
+                     onChange={(e) => {
+                      const v = e.target.value;
+                      setSelectedMatchId(v ? Number(v) : null);
+                     }}
                  >
+                     {readOnly && <option value="">Terkini (Line Up terkini)</option>}
                      {matches.map(m => (
                          <option key={m.jadualID} value={m.jadualID}>
                              {m.jenis} - {new Date(m.tarikh).toLocaleDateString()} {m.masa}
                          </option>
                      ))}
-                     {matches.length === 0 && <option>Tiada acara direkodkan</option>}
+                     {matches.length === 0 && <option>Tiada perlawanan direkodkan</option>}
                  </select>
             </div>
-            {selectedMatch && (
+            {selectedMatchId && selectedMatch && (
                 <div className="bg-gray-100 p-4 rounded border border-gray-400">
                     <div><strong>Perlawanan:</strong> {selectedMatch.jenis}</div>
                     <div><strong>Tarikh:</strong> {new Date(selectedMatch.tarikh).toLocaleDateString()} | <strong>Masa:</strong> {selectedMatch.masa}</div>

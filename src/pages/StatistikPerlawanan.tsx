@@ -12,6 +12,7 @@ interface MatchPlayer {
 
 interface Jadual {
   jadualID: number;
+  kategori?: string;
   jenis: string;
   tarikh: string;
   masa: string;
@@ -20,14 +21,53 @@ interface Jadual {
 
 interface StatistikPerlawananProps {
   setCurrentPage: (page: string) => void;
+  role?: string;
 }
 
-export function StatistikPerlawanan({ setCurrentPage }: StatistikPerlawananProps) {
+export function StatistikPerlawanan({ setCurrentPage, role }: StatistikPerlawananProps) {
   const [matches, setMatches] = useState<Jadual[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState<number | null>(null);
   const [matchPlayers, setMatchPlayers] = useState<MatchPlayer[]>([]);
   const [matchResult, setMatchResult] = useState("Seri");
   const [loading, setLoading] = useState(false);
+
+  const getApiCandidates = (path: string) => {
+    const envBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+    const resolvedEnvBase = envBase ? String(envBase).replace(/\/+$/, "") : "";
+    const hostname = window.location.hostname;
+    const backendHostBase = `${window.location.protocol}//${hostname}:3002`;
+    const candidates: string[] = [];
+    if (resolvedEnvBase) candidates.push(resolvedEnvBase + path);
+    candidates.push(path);
+    candidates.push(backendHostBase + path);
+    return candidates;
+  };
+
+  const fetchJsonApi = async (path: string, init?: RequestInit) => {
+    const candidates = getApiCandidates(path);
+    let lastError: unknown = null;
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, init);
+        const text = await res.text();
+        let data: any = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
+        if (data === null && res.ok) continue;
+        if (res.status === 404 || res.status === 502 || res.status === 503 || res.status === 504) {
+          lastError = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        return { res, data, text };
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("Request failed");
+  };
 
   // Fetch matches (Jadual)
   useEffect(() => {
@@ -35,16 +75,16 @@ export function StatistikPerlawanan({ setCurrentPage }: StatistikPerlawananProps
       try {
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
-        const response = await fetch("/api/jadual", {
-          headers: { Authorization: authHeader },
-        });
-        if (response.ok) {
-          const data: Jadual[] = await response.json();
-          // Don't filter, show all jadual
-          setMatches(data);
-          if (data.length > 0) {
-            setSelectedMatchId(data[0].jadualID);
-          }
+        const resp = await fetchJsonApi("/api/jadual", { headers: { Authorization: authHeader } });
+        if (resp.res.ok && Array.isArray(resp.data)) {
+          const data: Jadual[] = resp.data;
+          const perlawananOnly = data.filter((m) => {
+            const kat = String((m as any)?.kategori || "").toUpperCase();
+            if (kat) return kat === "PERLAWANAN";
+            return String(m?.jenis || "").toLowerCase().includes("perlaw");
+          });
+          setMatches(perlawananOnly);
+          if (perlawananOnly.length > 0) setSelectedMatchId(perlawananOnly[0].jadualID);
         }
       } catch (error) {
         console.error("Ralat memuatkan jadual:", error);
@@ -93,37 +133,13 @@ export function StatistikPerlawanan({ setCurrentPage }: StatistikPerlawananProps
 
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
-        
-        // Fetch all players first to map names
-        const playersResponse = await fetch("/api/pemain", {
-            headers: { Authorization: authHeader },
-        });
-        const playersData = await playersResponse.json();
 
-        // Fetch performance records for each player (inefficient but works for now given API constraints)
-        // Ideally we need an endpoint /api/prestasi/date/:date
-        // For now, we will simulate by fetching all per player or we need a new endpoint.
-        // Let's rely on a new endpoint logic or client-side filtering if dataset is small.
-        // Actually, fetching per player is too slow.
-        // Let's fetch all players, then for each player, fetch their stats? No.
-        
-        // Let's fetch all stats for all players? No endpoint for that.
-        // I will create a new endpoint in backend to fetch stats by date.
-        // For now, I'll fetch players, and render them with 0 stats if no data found?
-        // Wait, user wants "Alive" system.
-        
-        // Strategy:
-        // 1. Get all players.
-        // 2. For each player, try to find a performance record on that date.
-        // This requires multiple API calls or a better API.
-        // Let's assume I can add an API endpoint: GET /api/prestasi/tarikh/:date
-        
-        const response = await fetch(`/api/prestasi/tarikh/${matchDate}`, {
-             headers: { Authorization: authHeader },
+        const resp = await fetchJsonApi(`/api/prestasi/tarikh/${matchDate}`, {
+          headers: { Authorization: authHeader },
         });
-        
-        if (response.ok) {
-            const stats = await response.json();
+
+        if (resp.res.ok && Array.isArray(resp.data)) {
+            const stats = resp.data;
             // Map stats to display format
             // We need player name. The endpoint should return it joined.
             setMatchPlayers(stats.map((s: any) => ({
@@ -160,7 +176,7 @@ export function StatistikPerlawanan({ setCurrentPage }: StatistikPerlawananProps
         <div className="bg-gray-800 text-white p-4 flex justify-between items-center rounded-t">
           <h1 className="uppercase">Rekod Statistik Perlawanan</h1>
           <button
-            onClick={() => setCurrentPage("coach-dashboard")}
+            onClick={() => setCurrentPage(role === "Pentadbir" ? "dashboard" : role === "Pemain" ? "player-dashboard" : "coach-dashboard")}
             className="bg-white text-gray-800 px-4 py-2 rounded hover:bg-gray-100 transition-colors"
           >
             Kembali

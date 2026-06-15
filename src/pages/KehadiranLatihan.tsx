@@ -8,6 +8,44 @@ export function KehadiranLatihan(props) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
+  const getApiCandidates = (path) => {
+    const envBase = (import.meta).env?.VITE_API_BASE;
+    const resolvedEnvBase = envBase ? String(envBase).replace(/\/+$/, "") : "";
+    const hostname = window.location.hostname;
+    const backendHostBase = `${window.location.protocol}//${hostname}:3002`;
+    const candidates = [];
+    if (resolvedEnvBase) candidates.push(resolvedEnvBase + path);
+    candidates.push(path);
+    candidates.push(backendHostBase + path);
+    return candidates;
+  };
+
+  const fetchJsonApi = async (path, init) => {
+    const candidates = getApiCandidates(path);
+    let lastError = null;
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, init);
+        const text = await res.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
+        if (data === null && res.ok) continue;
+        if (res.status === 404 || res.status === 502 || res.status === 503 || res.status === 504) {
+          lastError = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        return { res, data, text };
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("Request failed");
+  };
+
   useEffect(function() {
     async function fetchInitialData() {
       try {
@@ -18,17 +56,9 @@ export function KehadiranLatihan(props) {
           setLoading(false);
           return;
         }
-        const promises = [
-          fetch("/api/pemain", { headers: { Authorization: authHeader } }),
-          fetch("/api/jadual?kategori=LATIHAN", { headers: { Authorization: authHeader } })
-        ];
-
-        const results = await Promise.all(promises);
-        const pemainRes = results[0];
-        const jadualRes = results[1];
-
-        if (pemainRes.ok) {
-          const pemainData = await pemainRes.json();
+        const pemainResp = await fetchJsonApi("/api/pemain", { headers: { Authorization: authHeader } });
+        if (pemainResp.res.ok && Array.isArray(pemainResp.data)) {
+          const pemainData = pemainResp.data;
           const mappedPemain = pemainData.map(function(p) {
             return {
               pemainID: p.pemain_id || p.pemainID,
@@ -41,13 +71,13 @@ export function KehadiranLatihan(props) {
         } else {
           let msg = "Gagal memuatkan senarai pemain.";
           try {
-            const errJson = await pemainRes.json();
-            if (errJson && errJson.message) msg = String(errJson.message);
+            if (pemainResp.data && pemainResp.data.message) msg = String(pemainResp.data.message);
           } catch {}
           setLoadError(msg);
         }
-        if (jadualRes.ok) {
-          const jadualData = await jadualRes.json();
+        const jadualResp = await fetchJsonApi("/api/jadual?kategori=LATIHAN", { headers: { Authorization: authHeader } });
+        if (jadualResp.res.ok && Array.isArray(jadualResp.data)) {
+          const jadualData = jadualResp.data;
           const mappedJadual = jadualData.map(function(j) {
             return {
               jadualID: j.jadual_id || j.jadualID,
@@ -72,8 +102,7 @@ export function KehadiranLatihan(props) {
         } else {
           let msg = "Gagal memuatkan jadual latihan.";
           try {
-            const errJson = await jadualRes.json();
-            if (errJson && errJson.message) msg = String(errJson.message);
+            if (jadualResp.data && jadualResp.data.message) msg = String(jadualResp.data.message);
           } catch {}
           setLoadError(msg);
           setJadualEvents([]);
@@ -95,13 +124,12 @@ export function KehadiranLatihan(props) {
     async function fetchKehadiranData() {
       try {
         const token = localStorage.getItem("token");
-        const response = await fetch("/api/kehadiran/jadual/" + selectedJadualId, {
-          headers: { Authorization: "Bearer " + token },
-        });
+        const authHeader = token ? "Bearer " + token : "";
+        const resp = await fetchJsonApi("/api/kehadiran/jadual/" + selectedJadualId, { headers: { Authorization: authHeader } });
 
         let records;
-        if (response.ok) {
-          const existingKehadiran = await response.json();
+        if (resp.res.ok && Array.isArray(resp.data)) {
+          const existingKehadiran = resp.data;
           records = pemainList.map(function(pemain) {
             const existing = existingKehadiran.find(function(k) { return k.pemainID === pemain.pemainID; });
             return {
@@ -153,7 +181,7 @@ export function KehadiranLatihan(props) {
     }
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/kehadiran/bulk", {
+      const resp = await fetchJsonApi("/api/kehadiran/bulk", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -162,11 +190,11 @@ export function KehadiranLatihan(props) {
         body: JSON.stringify({ records: kehadiranRecords }),
       });
 
-      if (response.ok) {
+      if (resp.res.ok) {
         alert("Kehadiran berjaya disimpan!");
       } else {
-        const errorData = await response.json();
-        alert("Gagal menyimpan kehadiran: " + errorData.message);
+        const msg = resp.data?.message ? String(resp.data.message) : ("Gagal menyimpan kehadiran. (" + resp.res.status + ")");
+        alert("Gagal menyimpan kehadiran: " + msg);
       }
     } catch (error) {
       console.error("Ralat menyimpan kehadiran:", error);

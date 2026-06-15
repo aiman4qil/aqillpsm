@@ -317,13 +317,31 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/register', async (req, res) => {
   const { username, password, role, posisi } = req.body;
-  const normalizedRole = normalizeRole(role);
+  const normalizedRole = normalizeRole(role) || "Pemain";
 
   if (!username || !password || !normalizedRole) {
     return res.status(400).json({ message: "Sila isi semua medan yang diperlukan." });
   }
 
   try {
+    if (normalizedRole !== "Pemain") {
+      const authHeader = req.headers && req.headers["authorization"];
+      const token = authHeader && String(authHeader).startsWith("Bearer ") ? String(authHeader).slice(7) : null;
+      if (!token) {
+        return res.status(403).json({ message: "Pendaftaran akaun Pentadbir/Jurulatih tidak dibenarkan. Hanya Pentadbir boleh cipta akaun ini." });
+      }
+      let requester = null;
+      try {
+        requester = jwt.verify(token, process.env.JWT_SECRET || "your_jwt_secret");
+      } catch {
+        requester = null;
+      }
+      const requesterRole = normalizeRole(requester && requester.role);
+      if (requesterRole !== "Pentadbir") {
+        return res.status(403).json({ message: "Akses ditolak. Hanya Pentadbir boleh cipta akaun Pentadbir/Jurulatih." });
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [userResult] = await db.execute(
@@ -1212,6 +1230,113 @@ app.post('/api/kehadiran/bulk', authenticateToken, async (req, res) => {
     console.error("Kod ralat:", error.code);
     console.error("Stack:", error.stack);
     res.status(500).json({ message: "Gagal menyimpan kehadiran: " + error.message });
+  }
+});
+
+app.post('/api/bukti-latihan/hantar', authenticateToken, async (req, res) => {
+  try {
+    const userRole = normalizeRole(req.user && req.user.role);
+    if (userRole !== "Pemain") {
+      return res.status(403).json({ message: "Akses ditolak. Hanya Pemain boleh hantar tugasan." });
+    }
+
+    const { jadual_id, catatan, buktiBase64, fileName } = req.body || {};
+    const jadualId = jadual_id ? Number(jadual_id) : null;
+    if (!jadualId) {
+      return res.status(400).json({ message: "Sila pilih tugasan latihan terlebih dahulu." });
+    }
+    if (!buktiBase64) {
+      return res.status(400).json({ message: "Sila pilih fail bukti." });
+    }
+
+    const [pemainRows] = await db.execute("SELECT pemain_id FROM data_pemain WHERE user_id = ?", [req.user.userId]);
+    if (pemainRows.length === 0) {
+      return res.status(404).json({ message: "Pemain tidak dijumpai." });
+    }
+    const pemainId = pemainRows[0].pemain_id;
+
+    const [jadualRows] = await db.execute(
+      "SELECT jadual_id FROM jadual_aktiviti WHERE jadual_id = ? AND kategori = 'LATIHAN'",
+      [jadualId]
+    );
+    if (jadualRows.length === 0) {
+      return res.status(404).json({ message: "Jadual latihan tidak dijumpai." });
+    }
+
+    const [cols] = await db.execute("SHOW COLUMNS FROM bukti_latihan");
+    const colSet = new Set(cols.map((c) => String(c.Field)));
+
+    let storedFilePath = "";
+    const filePathCol = colSet.has("file_path") ? "file_path" : (colSet.has("path") ? "path" : null);
+    if (filePathCol) {
+      const raw = String(buktiBase64);
+      const match = raw.match(/^data:([a-zA-Z0-9/+.-]+);base64,(.+)$/);
+      const base64Data = match ? match[2] : raw;
+      const buffer = Buffer.from(base64Data, "base64");
+
+      const safeOriginal = fileName ? String(fileName).replace(/[^\w.\-() ]+/g, "_") : "bukti";
+      const originalExt = path.extname(safeOriginal) || ".bin";
+      const storedName = `bukti_${Date.now()}_${Math.random().toString(16).slice(2)}${originalExt}`;
+      const absolutePath = path.join(uploadsDir, storedName);
+
+      fs.writeFileSync(absolutePath, buffer);
+      storedFilePath = `/uploads/${storedName}`;
+    }
+
+    const insertCols = [];
+    const insertVals = [];
+
+    if (colSet.has("jadual_id")) {
+      insertCols.push("jadual_id");
+      insertVals.push(jadualId);
+    }
+    if (colSet.has("pemain_id")) {
+      insertCols.push("pemain_id");
+      insertVals.push(pemainId);
+    }
+
+    const noteCol = colSet.has("catatan") ? "catatan" : (colSet.has("nota") ? "nota" : null);
+    if (noteCol) {
+      insertCols.push(noteCol);
+      insertVals.push(catatan ? String(catatan) : "");
+    }
+
+    const fnCol = colSet.has("file_name") ? "file_name" : (colSet.has("nama_fail") ? "nama_fail" : null);
+    if (fnCol) {
+      insertCols.push(fnCol);
+      insertVals.push(fileName ? String(fileName) : "");
+    }
+
+    if (filePathCol) {
+      insertCols.push(filePathCol);
+      insertVals.push(storedFilePath);
+    }
+
+    const buktiColCandidates = ["bukti_base64", "bukti", "bukti_fail", "buktiFile", "bukti_path", "bukti_url"];
+    const buktiCol = buktiColCandidates.find((c) => colSet.has(c)) || null;
+    if (buktiCol) {
+      insertCols.push(buktiCol);
+      insertVals.push(String(buktiBase64));
+    }
+
+    const dateCol = colSet.has("tarikh_hantar") ? "tarikh_hantar" : (colSet.has("created_at") ? "created_at" : null);
+    if (dateCol && insertCols.indexOf(dateCol) === -1) {
+      insertCols.push(dateCol);
+      insertVals.push(new Date());
+    }
+
+    if (insertCols.length === 0) {
+      return res.status(500).json({ message: "Struktur jadual bukti_latihan tidak serasi." });
+    }
+
+    const placeholders = insertCols.map(() => "?").join(", ");
+    const sql = `INSERT INTO bukti_latihan (${insertCols.join(", ")}) VALUES (${placeholders})`;
+    await db.execute(sql, insertVals);
+
+    res.status(201).json({ message: "Tugasan berjaya dihantar!" });
+  } catch (error) {
+    console.error("Ralat menghantar tugasan:", error);
+    res.status(500).json({ message: "Gagal menghantar tugasan." });
   }
 });
 

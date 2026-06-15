@@ -25,16 +25,51 @@ export function JadualAktiviti({ setCurrentPage, role }: JadualAktivitiProps) {
     keterangan: "",
   });
 
+  const getApiCandidates = (path: string) => {
+    const envBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+    const resolvedEnvBase = envBase ? String(envBase).replace(/\/+$/, "") : "";
+    const hostname = window.location.hostname;
+    const backendHostBase = `${window.location.protocol}//${hostname}:3002`;
+    const candidates: string[] = [];
+    if (resolvedEnvBase) candidates.push(resolvedEnvBase + path);
+    candidates.push(path);
+    candidates.push(backendHostBase + path);
+    return candidates;
+  };
+
+  const fetchJsonApi = async (path: string, init?: RequestInit) => {
+    const candidates = getApiCandidates(path);
+    let lastError: unknown = null;
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, init);
+        const text = await res.text();
+        let data: any = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
+        if (data === null && res.ok) continue;
+        if (res.status === 404 || res.status === 502 || res.status === 503 || res.status === 504) {
+          lastError = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        return { res, data, text };
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("Request failed");
+  };
+
   const fetchJadual = async () => {
     try {
       const token = localStorage.getItem("token");
       const authHeader = token ? "Bearer " + token : "";
-      const response = await fetch("/api/jadual", {
-        headers: { Authorization: authHeader },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setJadualEvents(data);
+      const resp = await fetchJsonApi("/api/jadual", { headers: { Authorization: authHeader } });
+      if (resp.res.ok && Array.isArray(resp.data)) {
+        setJadualEvents(resp.data);
       } else {
         console.error("Gagal mendapatkan data jadual");
       }
@@ -51,7 +86,7 @@ export function JadualAktiviti({ setCurrentPage, role }: JadualAktivitiProps) {
     try {
       const token = localStorage.getItem("token");
       const authHeader = token ? "Bearer " + token : "";
-      const response = await fetch("/api/jadual", {
+      const resp = await fetchJsonApi("/api/jadual", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -59,7 +94,7 @@ export function JadualAktiviti({ setCurrentPage, role }: JadualAktivitiProps) {
         },
         body: JSON.stringify(newEventForm),
       });
-      if (response.ok) {
+      if (resp.res.ok) {
         alert("Acara berjaya ditambah!");
         fetchJadual(); // Refresh list
         setNewEventForm({ // Reset form
@@ -70,8 +105,8 @@ export function JadualAktiviti({ setCurrentPage, role }: JadualAktivitiProps) {
           keterangan: "",
         });
       } else {
-        const errorData = await response.json();
-        alert(`Gagal menambah acara: ${errorData.message}`);
+        const msg = resp.data?.message ? String(resp.data.message) : ("Gagal menambah acara. (" + resp.res.status + ")");
+        alert(`Gagal menambah acara: ${msg}`);
       }
     } catch (error) {
       console.error("Ralat menambah acara:", error);
@@ -84,15 +119,16 @@ export function JadualAktiviti({ setCurrentPage, role }: JadualAktivitiProps) {
       try {
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
-        const response = await fetch(`/api/jadual/${id}`, {
+        const resp = await fetchJsonApi(`/api/jadual/${id}`, {
           method: "DELETE",
           headers: { Authorization: authHeader },
         });
-        if (response.ok) {
+        if (resp.res.ok) {
           alert("Acara berjaya dipadam!");
           fetchJadual(); // Refresh list
         } else {
-          alert("Gagal memadam acara.");
+          const msg = resp.data?.message ? String(resp.data.message) : ("Gagal memadam acara. (" + resp.res.status + ")");
+          alert(msg);
         }
       } catch (error) {
         console.error("Ralat memadam acara:", error);

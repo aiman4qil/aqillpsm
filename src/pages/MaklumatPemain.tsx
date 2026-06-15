@@ -223,6 +223,12 @@ export function MaklumatPemain({ setCurrentPage }: MaklumatPemainProps) {
               Tambah Pemain
             </button>
             <button
+              onClick={() => setCurrentPage("tambah-jurulatih")}
+              className="px-6 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 transition-colors uppercase"
+            >
+              Tambah Jurulatih
+            </button>
+            <button
               onClick={fetchPlayers}
               className="px-6 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 transition-colors uppercase"
             >
