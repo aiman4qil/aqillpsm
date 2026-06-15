@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useState, useEffect } from "react";
 
 interface Profile {
@@ -55,7 +56,7 @@ export function ProfilSaya({ setCurrentPage, playerProfile }: any) {
     const fetchProfile = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch("/api/pemain/profil", {
+        const res = await apiFetch("/api/pemain/profil", {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
@@ -94,7 +95,7 @@ export function ProfilSaya({ setCurrentPage, playerProfile }: any) {
         email: formData.email
       };
 
-      const res = await fetch("/api/pemain/profil", {
+      const res = await apiFetch("/api/pemain/profil", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -130,7 +131,7 @@ export function ProfilSaya({ setCurrentPage, playerProfile }: any) {
 
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch("/api/change-password", {
+      const res = await apiFetch("/api/change-password", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",

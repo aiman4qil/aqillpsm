@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useState, useEffect } from "react";
 
 interface Tugasan {
@@ -21,7 +22,7 @@ export function HantarTugasan({ setCurrentPage }: any) {
         setErrorMessage("");
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
-        const response = await fetch("/api/jadual?kategori=LATIHAN", {
+        const response = await apiFetch("/api/jadual?kategori=LATIHAN", {
           headers: { Authorization: authHeader },
         });
         if (response.ok) {
@@ -82,7 +83,7 @@ export function HantarTugasan({ setCurrentPage }: any) {
       const authHeader = token ? "Bearer " + token : "";
       const url = "/api/bukti-latihan/hantar";
       
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useState, useEffect } from "react";
 
 interface CoachDashboardProps {
@@ -25,7 +26,7 @@ export function CoachDashboard({ setCurrentPage, handleLogout }: CoachDashboardP
     const fetchDashboard = async () => {
       try {
         const token = localStorage.getItem("token");
-        const response = await fetch("/api/dashboard/coach", {
+        const response = await apiFetch("/api/dashboard/coach", {
           headers: { Authorization: token ? "Bearer " + token : "" },
         });
         if (response.ok) {

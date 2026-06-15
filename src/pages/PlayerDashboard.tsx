@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useEffect, useState } from "react";
 
 interface Profile {
@@ -74,10 +75,10 @@ export function PlayerDashboard(props: PlayerDashboardProps) {
         const headers = { Authorization: "Bearer " + token };
 
         const promises = [
-          fetch("/api/pemain/profil", { headers: headers }),
-          fetch("/api/jadual", { headers: headers }),
-          fetch("/api/prestasi/pemain/saya", { headers: headers }),
-          fetch("/api/pengumuman", { headers: headers }),
+          apiFetch("/api/pemain/profil", { headers: headers }),
+          apiFetch("/api/jadual", { headers: headers }),
+          apiFetch("/api/prestasi/pemain/saya", { headers: headers }),
+          apiFetch("/api/pengumuman", { headers: headers }),
         ];
 
         const results = await Promise.all(promises);
@@ -85,11 +86,12 @@ export function PlayerDashboard(props: PlayerDashboardProps) {
         const jadualRes = results[1];
         const prestasiRes = results[2];
         const pengumumanRes = results[3];
+        let jadualData: any[] = [];
 
         if (profileRes.ok) setProfile(await profileRes.json());
         if (jadualRes.ok) {
-          const allEvents = await jadualRes.json();
-          const mappedEvents = allEvents.map(function(e: any) {
+          jadualData = await jadualRes.json();
+          const mappedEvents = jadualData.map(function(e: any) {
             return {
               jadualID: e.jadual_id,
               jenis: e.jenis_aktiviti,
@@ -146,9 +148,8 @@ export function PlayerDashboard(props: PlayerDashboardProps) {
             }
           });
 
-          if (jadualRes.ok) {
-            const allJadual = await jadualRes.json();
-            allJadual.forEach(function(jad: any) {
+          if (jadualData.length > 0) {
+            jadualData.forEach(function(jad: any) {
               const eventDate = new Date(jad.tarikh);
               const now = new Date();
               const diffDays = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));

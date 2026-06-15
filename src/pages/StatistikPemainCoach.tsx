@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useState, useEffect } from "react";
 
 interface Player {
@@ -24,7 +25,7 @@ export function StatistikPemainCoach({ setCurrentPage }: any) {
       try {
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
-        const res = await fetch("/api/pemain", {
+        const res = await apiFetch("/api/pemain", {
            headers: { Authorization: authHeader }
         });
         if (res.ok) {
@@ -47,7 +48,7 @@ export function StatistikPemainCoach({ setCurrentPage }: any) {
         try {
             const token = localStorage.getItem("token");
             const authHeader = token ? "Bearer " + token : "";
-            const res = await fetch(`/api/prestasi/pemain/${selectedPlayerId}`, {
+            const res = await apiFetch(`/api/prestasi/pemain/${selectedPlayerId}`, {
                 headers: { Authorization: authHeader }
             });
             if (res.ok) {

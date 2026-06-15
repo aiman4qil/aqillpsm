@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useState, useEffect } from "react";
 
 interface JadualEvent {
@@ -26,10 +27,10 @@ export function JadualSaya({ setCurrentPage }: any) {
       const token = localStorage.getItem("token");
       const authHeader = token ? "Bearer " + token : "";
       const [jadualRes, kehadiranRes] = await Promise.all([
-        fetch("/api/jadual", {
+        apiFetch("/api/jadual", {
           headers: { Authorization: authHeader },
         }),
-        fetch("/api/kehadiran/pemain/saya", {
+        apiFetch("/api/kehadiran/pemain/saya", {
           headers: { Authorization: authHeader },
         }),
       ]);

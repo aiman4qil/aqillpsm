@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useEffect, useState } from "react";
 
 interface Player {
@@ -20,7 +21,7 @@ export function MaklumatPemain({ setCurrentPage }: MaklumatPemainProps) {
   const fetchPlayers = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("/api/pemain" + (showInactive ? "?include_inactive=1" : ""), {
+      const response = await apiFetch("/api/pemain" + (showInactive ? "?include_inactive=1" : ""), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -61,7 +62,7 @@ export function MaklumatPemain({ setCurrentPage }: MaklumatPemainProps) {
     try {
       const token = localStorage.getItem("token");
       for (const username of selectedPlayers) {
-        const response = await fetch(`/api/pemain/${username}`, {
+        const response = await apiFetch(`/api/pemain/${username}`, {
           method: "DELETE",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -74,7 +75,7 @@ export function MaklumatPemain({ setCurrentPage }: MaklumatPemainProps) {
       }
       
       // Refresh list
-      const response = await fetch("/api/pemain" + (showInactive ? "?include_inactive=1" : ""), {
+      const response = await apiFetch("/api/pemain" + (showInactive ? "?include_inactive=1" : ""), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -104,7 +105,7 @@ export function MaklumatPemain({ setCurrentPage }: MaklumatPemainProps) {
     try {
       const token = localStorage.getItem("token");
       for (const username of selectedPlayers) {
-        const response = await fetch(`/api/pemain/${username}/active`, {
+        const response = await apiFetch(`/api/pemain/${username}/active`, {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
@@ -118,7 +119,7 @@ export function MaklumatPemain({ setCurrentPage }: MaklumatPemainProps) {
         }
       }
 
-      const response = await fetch("/api/pemain" + (showInactive ? "?include_inactive=1" : ""), {
+      const response = await apiFetch("/api/pemain" + (showInactive ? "?include_inactive=1" : ""), {
         headers: {
           Authorization: `Bearer ${token}`,
         },

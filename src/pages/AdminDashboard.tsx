@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useEffect, useState } from "react";
 
 interface AdminDashboardProps {
@@ -28,9 +29,9 @@ export function AdminDashboard({ setCurrentPage, handleLogout }: AdminDashboardP
         const headers = { Authorization: token ? "Bearer " + token : "" };
 
         const [pemainRes, jadualRes, pengumumanRes] = await Promise.all([
-          fetch("/api/pemain", { headers }),
-          fetch("/api/jadual", { headers }),
-          fetch("/api/pengumuman", { headers }),
+          apiFetch("/api/pemain", { headers }),
+          apiFetch("/api/jadual", { headers }),
+          apiFetch("/api/pengumuman", { headers }),
         ]);
 
         // Process stats

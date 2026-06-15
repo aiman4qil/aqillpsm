@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useState, useEffect } from "react";
 
 interface Prestasi {
@@ -22,7 +23,7 @@ export function PrestasiSaya({ setCurrentPage }: any) {
         setErrorMessage("");
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
-        const response = await fetch("/api/prestasi/pemain/saya", {
+        const response = await apiFetch("/api/prestasi/pemain/saya", {
           headers: { Authorization: authHeader },
         });
         if (response.ok) {

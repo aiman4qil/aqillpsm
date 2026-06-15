@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useState, useEffect } from "react";
 
 interface TrainingSession {
@@ -18,7 +19,7 @@ export function PengurusanLatihan({ setCurrentPage }: { setCurrentPage: (page: s
       try {
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
-        const response = await fetch("/api/jadual", {
+        const response = await apiFetch("/api/jadual", {
           headers: { Authorization: authHeader }
         });
         if (response.ok) {
@@ -57,7 +58,7 @@ export function PengurusanLatihan({ setCurrentPage }: { setCurrentPage: (page: s
     try {
       const token = localStorage.getItem("token");
       const authHeader = token ? "Bearer " + token : "";
-      const res = await fetch(`/api/jadual/${jadualID}`, { method: "DELETE", headers: { Authorization: authHeader } });
+      const res = await apiFetch(`/api/jadual/${jadualID}`, { method: "DELETE", headers: { Authorization: authHeader } });
       if (!res.ok) {
         alert("Gagal memadam latihan.");
         return;

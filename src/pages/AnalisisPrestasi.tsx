@@ -1,3 +1,4 @@
+import { apiFetch } from "../utils/api";
 import { useState, useEffect } from "react";
 
 interface Pemain {
@@ -45,8 +46,8 @@ export function AnalisisPrestasi({ setCurrentPage, role }: any) {
         const authHeader = token ? "Bearer " + token : "";
         
         const [pemainRes, jadualRes] = await Promise.all([
-          fetch("/api/pemain", { headers: { Authorization: authHeader } }),
-          fetch("/api/jadual", { headers: { Authorization: authHeader } })
+          apiFetch("/api/pemain", { headers: { Authorization: authHeader } }),
+          apiFetch("/api/jadual", { headers: { Authorization: authHeader } })
         ]);
 
         if (pemainRes.ok) {
@@ -74,7 +75,7 @@ export function AnalisisPrestasi({ setCurrentPage, role }: any) {
         try {
           const token = localStorage.getItem("token");
           const authHeader = token ? "Bearer " + token : "";
-          const response = await fetch(`/api/prestasi/pemain/${selectedPemainId}`, {
+          const response = await apiFetch(`/api/prestasi/pemain/${selectedPemainId}`, {
             headers: { Authorization: authHeader },
           });
           if (response.ok) {
@@ -154,7 +155,7 @@ export function AnalisisPrestasi({ setCurrentPage, role }: any) {
     try {
       const token = localStorage.getItem("token");
       const authHeader = token ? "Bearer " + token : "";
-      const response = await fetch("/api/prestasi", {
+      const response = await apiFetch("/api/prestasi", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -172,7 +173,7 @@ export function AnalisisPrestasi({ setCurrentPage, role }: any) {
             try {
               const token = localStorage.getItem("token");
       const authHeader = token ? "Bearer " + token : "";
-              const response = await fetch(`/api/prestasi/pemain/${selectedPemainId}`, {
+              const response = await apiFetch(`/api/prestasi/pemain/${selectedPemainId}`, {
         headers: { Authorization: authHeader }
               });
               if (response.ok) {
