@@ -18,16 +18,54 @@ export function Pengumuman({ setCurrentPage }: any) {
     kandungan: "",
   });
 
+  const getApiCandidates = (path: string) => {
+    const envBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+    const resolvedEnvBase = envBase ? String(envBase).replace(/\/+$/, "") : "";
+    const hostname = window.location.hostname;
+    const backendHostBase = `${window.location.protocol}//${hostname}:3002`;
+    const candidates: string[] = [];
+    if (resolvedEnvBase) candidates.push(resolvedEnvBase + path);
+    candidates.push(path);
+    candidates.push(backendHostBase + path);
+    return candidates;
+  };
+
+  const fetchJsonApi = async (path: string, init?: RequestInit) => {
+    const candidates = getApiCandidates(path);
+    let lastError: unknown = null;
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, init);
+        const text = await res.text();
+        let data: any = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
+        }
+        if (data === null && res.ok) continue;
+        if (res.status === 404 || res.status === 502 || res.status === 503 || res.status === 504) {
+          lastError = new Error(`HTTP ${res.status}`);
+          continue;
+        }
+        return { res, data, text };
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error("Request failed");
+  };
+
   useEffect(() => {
     const fetchPengumuman = async () => {
       try {
         const token = localStorage.getItem("token");
         const authHeader = token ? "Bearer " + token : "";
-        const response = await fetch("/api/pengumuman", {
+        const resp = await fetchJsonApi("/api/pengumuman", {
           headers: { Authorization: authHeader },
         });
-        if (response.ok) {
-          setAnnouncements(await response.json());
+        if (resp.res.ok && Array.isArray(resp.data)) {
+          setAnnouncements(resp.data);
         } else {
           console.error("Gagal memuatkan data pengumuman");
         }
@@ -46,7 +84,7 @@ export function Pengumuman({ setCurrentPage }: any) {
     try {
       const token = localStorage.getItem("token");
       const authHeader = token ? "Bearer " + token : "";
-      const response = await fetch("/api/pengumuman", {
+      const response = await fetchJsonApi("/api/pengumuman", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -54,8 +92,8 @@ export function Pengumuman({ setCurrentPage }: any) {
         },
         body: JSON.stringify(newAnnouncementForm),
       });
-      if (response.ok) {
-        const createdPengumuman = await response.json();
+      if (response.res.ok) {
+        const createdPengumuman = response.data;
         setAnnouncements([createdPengumuman, ...announcements]);
         setNewAnnouncementForm({
           kepada: "Semua Pemain",
@@ -65,7 +103,8 @@ export function Pengumuman({ setCurrentPage }: any) {
         });
         alert("Pengumuman berjaya dihantar!");
       } else {
-        alert("Gagal menghantar pengumuman.");
+        const msg = response.data?.message ? String(response.data.message) : ("Gagal menghantar pengumuman. (" + response.res.status + ")");
+        alert(msg);
       }
     } catch (error) {
       console.error("Ralat menghantar pengumuman:", error);
