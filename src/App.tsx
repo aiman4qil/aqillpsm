@@ -789,7 +789,7 @@ export default function App() {
               padding: isSidebarCollapsed ? "12px 0" : "12px 14px",
               borderRadius: 10,
               border: "none",
-              background: brandColor,
+              background: "#dc2626",
               color: "#ffffff",
               fontWeight: 800,
               cursor: "pointer"
